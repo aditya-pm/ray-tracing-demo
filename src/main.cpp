@@ -121,14 +121,28 @@ bool is_mouse_on_circle(struct Circle* circle) {
     return (dx * dx) + (dy * dy) <= circle->r * circle->r;
 }
 
-void draw_circle_at_mouse(struct Circle* circle, struct Ray2D rays[], Color color) {
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && is_mouse_on_circle(circle)) {
+void move_emitter_circle(struct Circle* emitter, Ray2D rays[]) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        is_mouse_on_circle(emitter)) {
         Vector2 pos = GetMousePosition();
-        circle->x = pos.x;
-        circle->y = pos.y;
-        generate_rays(circle, rays);
+        emitter->x = pos.x;
+        emitter->y = pos.y;
+
+        generate_rays(emitter, rays);
     }
-    DrawCircle(circle->x, circle->y, circle->r, color);
+
+    DrawCircle(emitter->x, emitter->y, emitter->r, WHITE);
+}
+
+void move_obstacle_circle(struct Circle* obstacle) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        is_mouse_on_circle(obstacle)) {
+        Vector2 pos = GetMousePosition();
+        obstacle->x = pos.x;
+        obstacle->y = pos.y;
+    }
+
+    DrawCircle(obstacle->x, obstacle->y, obstacle->r, WHITE);
 }
 
 int main() {
@@ -147,8 +161,8 @@ int main() {
         ClearBackground(GRAY);
 
         draw_rays(rays, &shadow_circle);
-        draw_circle_at_mouse(&circle, rays, WHITE);
-        draw_circle_at_mouse(&shadow_circle, rays, WHITE);
+        move_emitter_circle(&circle, rays);
+        move_obstacle_circle(&shadow_circle);
 
         EndDrawing();
     }
