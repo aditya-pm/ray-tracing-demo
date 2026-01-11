@@ -8,7 +8,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define RAYS_NUMBER 2500
+#define RAYS_NUMBER 100  // optimal = 2500
 #define RAY_LENGTH 2000.0f
 
 struct Circle {
@@ -43,7 +43,9 @@ void generate_rays(const Circle& emitter, struct Ray2D rays[]) {
 bool ray_circle_intersect(
     const Ray2D& ray,
     const Circle& obstacle_circle,
-    float* distance_to_hit) {
+    float* distance_to_hit,
+    Vector2& hit_point_ref,
+    Vector2& surface_normal_ref) {
     // vector from ray.origin to obstacle_circle center
     Vector2 to_circle = {
         obstacle_circle.x - ray.origin.x,
@@ -86,6 +88,24 @@ bool ray_circle_intersect(
     float hit_distance = closest_along_ray - half_chord;
 
     *distance_to_hit = hit_distance;
+
+    // hit point
+    Vector2 hit_point = {
+        ray.origin.x + ray.direction.x * hit_distance,
+        ray.origin.y + ray.direction.y * hit_distance};
+
+    hit_point_ref = hit_point;
+
+    // surface normal (obstacle_circle's center to hit point)
+    Vector2 surface_normal = {hit_point.x - obstacle_circle.x, hit_point.y - obstacle_circle.y};
+    float surface_normal_magnitude = sqrtf(
+        surface_normal.x * surface_normal.x + surface_normal.y * surface_normal.y);
+    // normalize
+    surface_normal.x /= surface_normal_magnitude;
+    surface_normal.y /= surface_normal_magnitude;
+
+    surface_normal_ref = surface_normal;
+
     return true;
 }
 
@@ -95,8 +115,10 @@ void draw_rays(struct Ray2D rays[], const Circle& obstacle_circle) {
 
         float maxLen = RAY_LENGTH;
         float distance_to_hit;
+        Vector2 hit_point;
+        Vector2 surface_normal;
 
-        if (ray_circle_intersect(ray, obstacle_circle, &distance_to_hit)) {
+        if (ray_circle_intersect(ray, obstacle_circle, &distance_to_hit, hit_point, surface_normal)) {
             if (distance_to_hit > 0 && distance_to_hit < maxLen)
                 maxLen = distance_to_hit;
         }
@@ -107,6 +129,10 @@ void draw_rays(struct Ray2D rays[], const Circle& obstacle_circle) {
 
         Color yellow = {255, 255, 0, 20};
         DrawLineEx(ray.origin, end, 2.0f, yellow);
+
+        DrawLineEx(hit_point,
+                   {hit_point.x + surface_normal.x * 25, hit_point.y + surface_normal.y * 25},
+                   1.0f, RED);
     }
 }
 
