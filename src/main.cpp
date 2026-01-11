@@ -8,7 +8,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define RAYS_NUMBER 5000
+#define RAYS_NUMBER 2500
 #define RAY_LENGTH 2000.0f
 
 struct Circle {
@@ -147,7 +147,7 @@ int main() {
     InitWindow(WIDTH, HEIGHT, "Ray Tracing Demo");
     SetTargetFPS(60);
 
-    struct Circle circle = {200, 200, 80};
+    struct Circle circle = {200, 200, 40};
     struct Circle shadow_circle = {650, 300, 140};
 
     struct Ray2D rays[RAYS_NUMBER];
