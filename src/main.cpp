@@ -1,3 +1,6 @@
+// 2D CPU-based ray tracing demo
+// demonstrates ray–circle intersection
+
 #include <cmath>
 #include <iostream>
 
@@ -5,7 +8,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define RAYS_NUMBER 1500
+#define RAYS_NUMBER 5000
 #define RAY_LENGTH 2000.0f
 
 struct Circle {
@@ -24,7 +27,6 @@ void generate_rays(struct Circle* circle, struct Ray2D rays[]) {
         float angle = (float)i * (2 * M_PI) / RAYS_NUMBER;
         struct Ray2D ray = {circle->x, circle->y, angle};
         rays[i] = ray;
-        std::cout << angle << std::endl;
     }
 }
 
@@ -34,21 +36,46 @@ bool ray_circle_intersect(
     Vector2 center,
     float radius,
     float* distance_to_hit) {
-    Vector2 oc = {
-        origin.x - center.x,
-        origin.y - center.y};
+    // vector from ray start to circle (obstacle) center
+    Vector2 to_circle = {
+        center.x - origin.x,
+        center.y - origin.y};
 
-    float a = dir.x * dir.x + dir.y * dir.y;
-    float b = 2.0f * (oc.x * dir.x + oc.y * dir.y);
-    float c = (oc.x * oc.x + oc.y * oc.y) - radius * radius;
+    // dot product (distance from the ray origin to the point on the ray that is closest
+    // to the circle center, measured along the ray. It is the projection of to_circle
+    // onto dir.)
+    float closest_along_ray = to_circle.x * dir.x + to_circle.y * dir.y;
 
-    float discriminant = b * b - 4 * a * c;
-    if (discriminant < 0) return false;
+    // negative distance implies that closest point is behind the ray, i.e., obstacle
+    // circle is behind ray
+    if (closest_along_ray < 0) return false;
 
-    float t = (-b - sqrtf(discriminant)) / (2.0f * a);
-    if (t < 0) return false;
+    // using the above dot product, we find the point on the ray.
+    Vector2 closest_point = {
+        origin.x + dir.x * closest_along_ray,
+        origin.y + dir.y * closest_along_ray};
 
-    *distance_to_hit = t;
+    // vector from the closest point on the ray to the circle center, i.e., this vector points
+    // straight from the ray to the circle at closest approach
+    Vector2 perpendicular = {
+        center.x - closest_point.x,
+        center.y - closest_point.y};
+
+    // magnitute of perpendicular squared (avoiding root)
+    float distance_sq = perpendicular.x * perpendicular.x + perpendicular.y * perpendicular.y;
+
+    // ray misses the circle (closest approach is outside the radius)
+    if (distance_sq > radius * radius) return false;
+
+    // distance along the ray from the closest point back to the circle surface.
+    // this is half the length of the ray segment inside the circle (the full chord),
+    // and is used to step back from the closest approach to the first hit point.
+    float half_chord = sqrtf(radius * radius - distance_sq);
+
+    // distance from ray origin to first contact with the obstacle circle
+    float hit_distance = closest_along_ray - half_chord;
+
+    *distance_to_hit = hit_distance;
     return true;
 }
 
@@ -60,21 +87,28 @@ void draw_rays(struct Ray2D rays[], struct Circle* obstacle) {
         Ray2D ray = rays[i];
 
         Vector2 origin = {ray.start_x, ray.start_y};
-        Vector2 dir = {cosf(ray.angle), sinf(ray.angle)};
+
+        Vector2 direction = {cosf(ray.angle), sinf(ray.angle)};
+        float direction_magnitude = sqrtf(direction.x * direction.x + direction.y * direction.y);
+
+        // normalize
+        direction.x /= direction_magnitude;
+        direction.y /= direction_magnitude;
 
         float maxLen = RAY_LENGTH;
         float distance_to_hit;
 
-        if (ray_circle_intersect(origin, dir, center, radius, &distance_to_hit)) {
+        if (ray_circle_intersect(origin, direction, center, radius, &distance_to_hit)) {
             if (distance_to_hit > 0 && distance_to_hit < maxLen)
                 maxLen = distance_to_hit;
         }
 
         Vector2 end = {
-            origin.x + dir.x * maxLen,
-            origin.y + dir.y * maxLen};
+            origin.x + direction.x * maxLen,
+            origin.y + direction.y * maxLen};
 
-        DrawLineEx(origin, end, 2.0f, YELLOW);
+        Color yellow = {255, 255, 0, 20};
+        DrawLineEx(origin, end, 2.0f, yellow);
     }
 }
 
