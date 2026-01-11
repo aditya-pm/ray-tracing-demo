@@ -5,7 +5,8 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define RAYS_NUMBER 1000
+#define RAYS_NUMBER 1500
+#define RAY_LENGTH 2000.0f
 
 struct Circle {
     float x;
@@ -27,23 +28,53 @@ void generate_rays(struct Circle* circle, struct Ray2D rays[]) {
     }
 }
 
-void draw_rays(struct Ray2D rays[]) {
+bool ray_circle_intersect(
+    Vector2 origin,
+    Vector2 dir,
+    Vector2 center,
+    float radius,
+    float* distance_to_hit) {
+    Vector2 oc = {
+        origin.x - center.x,
+        origin.y - center.y};
+
+    float a = dir.x * dir.x + dir.y * dir.y;
+    float b = 2.0f * (oc.x * dir.x + oc.y * dir.y);
+    float c = (oc.x * oc.x + oc.y * oc.y) - radius * radius;
+
+    float discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) return false;
+
+    float t = (-b - sqrtf(discriminant)) / (2.0f * a);
+    if (t < 0) return false;
+
+    *distance_to_hit = t;
+    return true;
+}
+
+void draw_rays(struct Ray2D rays[], struct Circle* obstacle) {
+    Vector2 center = {obstacle->x, obstacle->y};
+    float radius = obstacle->r;
+
     for (int i = 0; i < RAYS_NUMBER; i++) {
-        struct Ray2D ray = rays[i];
+        Ray2D ray = rays[i];
 
-        float dx = cosf(ray.angle);
-        float dy = sinf(ray.angle);
+        Vector2 origin = {ray.start_x, ray.start_y};
+        Vector2 dir = {cosf(ray.angle), sinf(ray.angle)};
 
-        float length = 1000.0f;
+        float maxLen = RAY_LENGTH;
+        float distance_to_hit;
 
-        float x2 = ray.start_x + dx * length;
-        float y2 = ray.start_y + dy * length;
+        if (ray_circle_intersect(origin, dir, center, radius, &distance_to_hit)) {
+            if (distance_to_hit > 0 && distance_to_hit < maxLen)
+                maxLen = distance_to_hit;
+        }
 
-        DrawLineEx(
-            (Vector2){ray.start_x, ray.start_y},
-            (Vector2){x2, y2},
-            3.0f,
-            YELLOW);
+        Vector2 end = {
+            origin.x + dir.x * maxLen,
+            origin.y + dir.y * maxLen};
+
+        DrawLineEx(origin, end, 2.0f, YELLOW);
     }
 }
 
@@ -75,13 +106,13 @@ int main() {
 
     struct Ray2D rays[RAYS_NUMBER];
     generate_rays(&circle, rays);  // need rays to be generated before circle is moved too
-    draw_rays(rays);
+    draw_rays(rays, &shadow_circle);
 
     while (!WindowShouldClose()) {
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(GRAY);
 
-        draw_rays(rays);
+        draw_rays(rays, &shadow_circle);
         draw_circle_at_mouse(&circle, rays, WHITE);
         draw_circle_at_mouse(&shadow_circle, rays, WHITE);
 
