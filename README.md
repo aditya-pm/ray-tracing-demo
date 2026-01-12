@@ -160,8 +160,3 @@ RayTracing.exe
 
 ---
 
-## Purpose
-
-This project serves as a **minimal, transparent foundation** for understanding how ray tracing works at a geometric and algorithmic level, with all logic visible and easy to modify.
-
-It is well-suited as a starting point for experimenting with more advanced ray tracing techniques.
