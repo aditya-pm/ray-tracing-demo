@@ -8,7 +8,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define EMITTER_RAYS_NUMBER 1500
+#define EMITTER_RAYS_NUMBER 2000
 #define RAY_LENGTH 2000.0f
 
 struct Circle {
@@ -109,7 +109,14 @@ bool ray_circle_intersect(
     return true;
 }
 
-void render_scene(struct Ray2D emitter_rays[], const Circle& obstacle_circle, Vector2 light_direction, bool debug) {
+void render_scene(
+    struct Ray2D emitter_rays[],
+    const Circle& obstacle_circle,
+    Vector2 light_direction,
+    RenderTexture2D& light_buffer,
+    bool debug) {
+    BeginTextureMode(light_buffer);
+
     for (int i = 0; i < EMITTER_RAYS_NUMBER; i++) {
         const Ray2D& emitter_ray = emitter_rays[i];
 
@@ -125,9 +132,17 @@ void render_scene(struct Ray2D emitter_rays[], const Circle& obstacle_circle, Ve
             hit_point,
             surface_normal);
 
-        if (hit && distance_to_hit > 0 && distance_to_hit < maxLen) {
-            maxLen = distance_to_hit;
+        float ray_length = hit ? distance_to_hit : RAY_LENGTH;
 
+        Vector2 emitter_ray_end = {
+            emitter_ray.origin.x + emitter_ray.direction.x * ray_length,
+            emitter_ray.origin.y + emitter_ray.direction.y * ray_length};
+
+        Color light_contribution = {255, 255, 200, 15};
+
+        DrawLineEx(emitter_ray.origin, emitter_ray_end, 1.0f, light_contribution);
+
+        if (hit) {
             float brightness = surface_normal.x * light_direction.x +
                                surface_normal.y * light_direction.y;
 
@@ -148,16 +163,14 @@ void render_scene(struct Ray2D emitter_rays[], const Circle& obstacle_circle, Ve
             }
         }
 
-        Vector2 emitter_ray_end = {
-            emitter_ray.origin.x + emitter_ray.direction.x * maxLen,
-            emitter_ray.origin.y + emitter_ray.direction.y * maxLen};
-
         if (debug) {
             // draw emitter rays
             Color yellow = {255, 255, 0, 20};
             DrawLineEx(emitter_ray.origin, emitter_ray_end, 2.0f, yellow);
         }
     }
+
+    EndTextureMode();
 }
 
 bool is_mouse_on_circle(const Circle& circle) {
@@ -224,6 +237,7 @@ void draw_light_direction(Vector2 light_direction, bool debug) {
 
 int main() {
     InitWindow(WIDTH, HEIGHT, "Ray Tracing Demo");
+    RenderTexture2D light_buffer = LoadRenderTexture(WIDTH, HEIGHT);
     SetTargetFPS(60);
 
     struct Circle circle = {200, 200, 40};
@@ -241,20 +255,32 @@ int main() {
     light_direction.x /= light_direction_magnitude;
     light_direction.y /= light_direction_magnitude;
 
-    bool debug = true;
+    bool debug = false;
 
     while (!WindowShouldClose()) {
+        BeginTextureMode(light_buffer);
+        ClearBackground(BLACK);
+        EndTextureMode();
+
         BeginDrawing();
         ClearBackground(BLACK);
 
         draw_light_direction(light_direction, debug);
-        render_scene(emitter_rays, shadow_circle1, light_direction, debug);
+        render_scene(emitter_rays, shadow_circle1, light_direction, light_buffer, debug);
         move_emitter_circle(circle, emitter_rays);
         move_obstacle_circle(shadow_circle1, debug);
+
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTextureRec(
+            light_buffer.texture,
+            {0, 0, (float)WIDTH, -(float)HEIGHT},
+            {0, 0},
+            WHITE);
 
         EndDrawing();
     }
 
+    UnloadRenderTexture(light_buffer);
     CloseWindow();
 
     return 0;
