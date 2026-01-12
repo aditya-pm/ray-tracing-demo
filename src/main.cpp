@@ -8,7 +8,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define EMITTER_RAYS_NUMBER 2000
+#define EMITTER_RAYS_NUMBER 1000
 #define RAY_LENGTH 2000.0f
 
 struct Circle {
@@ -109,18 +109,11 @@ bool ray_circle_intersect(
     return true;
 }
 
-void render_scene(
-    struct Ray2D emitter_rays[],
-    const Circle& obstacle_circle,
-    Vector2 light_direction,
-    RenderTexture2D& light_buffer,
-    bool debug) {
-    BeginTextureMode(light_buffer);
-
+void render_scene(struct Ray2D emitter_rays[], const Circle& obstacle_circle, Vector2 light_direction, bool debug) {
     for (int i = 0; i < EMITTER_RAYS_NUMBER; i++) {
         const Ray2D& emitter_ray = emitter_rays[i];
 
-        float maxLen = RAY_LENGTH;
+        float max_len = RAY_LENGTH;
         float distance_to_hit;
         Vector2 hit_point;
         Vector2 surface_normal;
@@ -132,17 +125,9 @@ void render_scene(
             hit_point,
             surface_normal);
 
-        float ray_length = hit ? distance_to_hit : RAY_LENGTH;
+        if (hit && distance_to_hit > 0 && distance_to_hit < max_len) {
+            max_len = distance_to_hit;
 
-        Vector2 emitter_ray_end = {
-            emitter_ray.origin.x + emitter_ray.direction.x * ray_length,
-            emitter_ray.origin.y + emitter_ray.direction.y * ray_length};
-
-        Color light_contribution = {255, 255, 200, 15};
-
-        DrawLineEx(emitter_ray.origin, emitter_ray_end, 1.0f, light_contribution);
-
-        if (hit) {
             float brightness = surface_normal.x * light_direction.x +
                                surface_normal.y * light_direction.y;
 
@@ -153,7 +138,7 @@ void render_scene(
             unsigned char intensity = (unsigned char)(brightness * 255);
             Color shaded = {intensity, intensity, intensity, 255};
 
-            DrawCircleV(hit_point, 2.0f, shaded);
+            DrawCircleV(hit_point, 5.0f, shaded);
 
             if (debug) {
                 // draw surface normal only if debug and ray hit
@@ -163,14 +148,16 @@ void render_scene(
             }
         }
 
+        Vector2 emitter_ray_end = {
+            emitter_ray.origin.x + emitter_ray.direction.x * max_len,
+            emitter_ray.origin.y + emitter_ray.direction.y * max_len};
+
         if (debug) {
             // draw emitter rays
             Color yellow = {255, 255, 0, 20};
             DrawLineEx(emitter_ray.origin, emitter_ray_end, 2.0f, yellow);
         }
     }
-
-    EndTextureMode();
 }
 
 bool is_mouse_on_circle(const Circle& circle) {
@@ -182,7 +169,7 @@ bool is_mouse_on_circle(const Circle& circle) {
     return (dx * dx) + (dy * dy) <= circle.r * circle.r;
 }
 
-void move_emitter_circle(Circle& emitter, Ray2D rays[]) {
+void move_emitter_circle(Circle& emitter, Ray2D rays[], bool debug) {
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
         is_mouse_on_circle(emitter)) {
         Vector2 pos = GetMousePosition();
@@ -193,6 +180,8 @@ void move_emitter_circle(Circle& emitter, Ray2D rays[]) {
     }
 
     DrawCircle(emitter.x, emitter.y, emitter.r, WHITE);
+    if (debug)
+        DrawText("Emitter", emitter.x - MeasureText("Emitter", 20) / 2.0, emitter.y - 20 / 2.0, 20, RED);
 }
 
 void move_obstacle_circle(Circle& obstacle, bool debug) {
@@ -206,6 +195,7 @@ void move_obstacle_circle(Circle& obstacle, bool debug) {
     if (debug) {
         // DrawCircle(obstacle.x, obstacle.y, obstacle.r, WHITE);
         DrawCircleLines(obstacle.x, obstacle.y, obstacle.r, GREEN);
+        DrawText("Obstacle", obstacle.x - MeasureText("Obstacle", 20) / 2.0, obstacle.y - 20 / 2.0, 20, RED);
     }
 }
 
@@ -235,12 +225,15 @@ void draw_light_direction(Vector2 light_direction, bool debug) {
     }
 }
 
+void toggle_debug(bool& debug) {
+    if (IsKeyPressed(KEY_D)) debug = !debug;
+}
+
 int main() {
     InitWindow(WIDTH, HEIGHT, "Ray Tracing Demo");
-    RenderTexture2D light_buffer = LoadRenderTexture(WIDTH, HEIGHT);
     SetTargetFPS(60);
 
-    struct Circle circle = {200, 200, 40};
+    struct Circle circle = {200, 200, 50};
     struct Circle shadow_circle1 = {650, 300, 140};
 
     struct Ray2D emitter_rays[EMITTER_RAYS_NUMBER];
@@ -258,29 +251,18 @@ int main() {
     bool debug = false;
 
     while (!WindowShouldClose()) {
-        BeginTextureMode(light_buffer);
-        ClearBackground(BLACK);
-        EndTextureMode();
-
         BeginDrawing();
         ClearBackground(BLACK);
 
+        toggle_debug(debug);
         draw_light_direction(light_direction, debug);
-        render_scene(emitter_rays, shadow_circle1, light_direction, light_buffer, debug);
-        move_emitter_circle(circle, emitter_rays);
+        render_scene(emitter_rays, shadow_circle1, light_direction, debug);
+        move_emitter_circle(circle, emitter_rays, debug);
         move_obstacle_circle(shadow_circle1, debug);
-
-        BeginBlendMode(BLEND_ADDITIVE);
-        DrawTextureRec(
-            light_buffer.texture,
-            {0, 0, (float)WIDTH, -(float)HEIGHT},
-            {0, 0},
-            WHITE);
 
         EndDrawing();
     }
 
-    UnloadRenderTexture(light_buffer);
     CloseWindow();
 
     return 0;
