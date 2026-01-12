@@ -8,7 +8,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 800
-#define RAYS_NUMBER 100  // optimal = 2500
+#define EMITTER_RAYS_NUMBER 1500
 #define RAY_LENGTH 2000.0f
 
 struct Circle {
@@ -22,9 +22,9 @@ struct Ray2D {
     Vector2 direction;  // must be normalized
 };
 
-void generate_rays(const Circle& emitter, struct Ray2D rays[]) {
-    for (int i = 0; i < RAYS_NUMBER; i++) {
-        float angle = (float)i * (2 * M_PI) / RAYS_NUMBER;
+void generate_emitter_rays(const Circle& emitter, struct Ray2D rays[]) {
+    for (int i = 0; i < EMITTER_RAYS_NUMBER; i++) {
+        float angle = (float)i * (2 * M_PI) / EMITTER_RAYS_NUMBER;
         Vector2 ray_origin = {emitter.x, emitter.y};
 
         Vector2 ray_direction = {cosf(angle), sinf(angle)};
@@ -109,30 +109,54 @@ bool ray_circle_intersect(
     return true;
 }
 
-void draw_rays(struct Ray2D rays[], const Circle& obstacle_circle) {
-    for (int i = 0; i < RAYS_NUMBER; i++) {
-        const Ray2D& ray = rays[i];
+void render_scene(struct Ray2D emitter_rays[], const Circle& obstacle_circle, Vector2 light_direction, bool debug) {
+    for (int i = 0; i < EMITTER_RAYS_NUMBER; i++) {
+        const Ray2D& emitter_ray = emitter_rays[i];
 
         float maxLen = RAY_LENGTH;
         float distance_to_hit;
         Vector2 hit_point;
         Vector2 surface_normal;
 
-        if (ray_circle_intersect(ray, obstacle_circle, &distance_to_hit, hit_point, surface_normal)) {
-            if (distance_to_hit > 0 && distance_to_hit < maxLen)
-                maxLen = distance_to_hit;
+        bool hit = ray_circle_intersect(
+            emitter_ray,
+            obstacle_circle,
+            &distance_to_hit,
+            hit_point,
+            surface_normal);
+
+        if (hit && distance_to_hit > 0 && distance_to_hit < maxLen) {
+            maxLen = distance_to_hit;
+
+            float brightness = surface_normal.x * light_direction.x +
+                               surface_normal.y * light_direction.y;
+
+            // brightness = fmaxf(0.0f, fminf(brightness, 1.0f));
+            if (brightness < 0) brightness = 0;
+            if (brightness > 1) brightness = 1;
+
+            unsigned char intensity = (unsigned char)(brightness * 255);
+            Color shaded = {intensity, intensity, intensity, 255};
+
+            DrawCircleV(hit_point, 2.0f, shaded);
+
+            if (debug) {
+                // draw surface normal only if debug and ray hit
+                DrawLineEx(hit_point,
+                           {hit_point.x + surface_normal.x * 25, hit_point.y + surface_normal.y * 25},
+                           1.0f, RED);
+            }
         }
 
-        Vector2 end = {
-            ray.origin.x + ray.direction.x * maxLen,
-            ray.origin.y + ray.direction.y * maxLen};
+        Vector2 emitter_ray_end = {
+            emitter_ray.origin.x + emitter_ray.direction.x * maxLen,
+            emitter_ray.origin.y + emitter_ray.direction.y * maxLen};
 
-        Color yellow = {255, 255, 0, 20};
-        DrawLineEx(ray.origin, end, 2.0f, yellow);
-
-        DrawLineEx(hit_point,
-                   {hit_point.x + surface_normal.x * 25, hit_point.y + surface_normal.y * 25},
-                   1.0f, RED);
+        if (debug) {
+            // draw emitter rays
+            Color yellow = {255, 255, 0, 20};
+            DrawLineEx(emitter_ray.origin, emitter_ray_end, 2.0f, yellow);
+        }
     }
 }
 
@@ -152,13 +176,13 @@ void move_emitter_circle(Circle& emitter, Ray2D rays[]) {
         emitter.x = pos.x;
         emitter.y = pos.y;
 
-        generate_rays(emitter, rays);
+        generate_emitter_rays(emitter, rays);
     }
 
     DrawCircle(emitter.x, emitter.y, emitter.r, WHITE);
 }
 
-void move_obstacle_circle(Circle& obstacle) {
+void move_obstacle_circle(Circle& obstacle, bool debug) {
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
         is_mouse_on_circle(obstacle)) {
         Vector2 pos = GetMousePosition();
@@ -166,7 +190,36 @@ void move_obstacle_circle(Circle& obstacle) {
         obstacle.y = pos.y;
     }
 
-    DrawCircle(obstacle.x, obstacle.y, obstacle.r, WHITE);
+    if (debug) {
+        // DrawCircle(obstacle.x, obstacle.y, obstacle.r, WHITE);
+        DrawCircleLines(obstacle.x, obstacle.y, obstacle.r, GREEN);
+    }
+}
+
+void draw_light_direction(Vector2 light_direction, bool debug) {
+    // arrow body
+    Vector2 start = {80.0f, 80.0f};
+    Vector2 end = {
+        start.x + light_direction.x * 60.0f,
+        start.y + light_direction.y * 60.0f};
+
+    // arrow head
+    Vector2 perp = {-light_direction.y, light_direction.x};
+
+    Vector2 arrow_left = {
+        end.x - light_direction.x * 10.0f + perp.x * 6.0f,
+        end.y - light_direction.y * 10.0f + perp.y * 6.0f};
+
+    Vector2 arrow_right = {
+        end.x - light_direction.x * 10.0f - perp.x * 6.0f,
+        end.y - light_direction.y * 10.0f - perp.y * 6.0f};
+
+    if (debug) {
+        DrawLineEx(start, end, 3.0f, RED);
+        DrawLineEx(end, arrow_left, 3.0f, RED);
+        DrawLineEx(end, arrow_right, 3.0f, RED);
+        DrawText("Light Direction (not photon, photon = opposite)", 80, 40, 16, RED);
+    }
 }
 
 int main() {
@@ -174,18 +227,30 @@ int main() {
     SetTargetFPS(60);
 
     struct Circle circle = {200, 200, 40};
-    struct Circle shadow_circle = {650, 300, 140};
+    struct Circle shadow_circle1 = {650, 300, 140};
 
-    struct Ray2D rays[RAYS_NUMBER];
-    generate_rays(circle, rays);  // need rays to be generated before circle is moved too
+    struct Ray2D emitter_rays[EMITTER_RAYS_NUMBER];
+    generate_emitter_rays(circle, emitter_rays);  // need rays to be generated before circle is moved too
+
+    // lambert lighting convention: light_direction is surface to light source.
+    // actual photons go from source to surface
+    // here light_direction is 'direction to travel to reach light'
+    Vector2 light_direction = {-1.0f, -1.0f};
+    float light_direction_magnitude = sqrtf(
+        light_direction.x * light_direction.x + light_direction.y * light_direction.y);
+    light_direction.x /= light_direction_magnitude;
+    light_direction.y /= light_direction_magnitude;
+
+    bool debug = true;
 
     while (!WindowShouldClose()) {
         BeginDrawing();
-        ClearBackground(GRAY);
+        ClearBackground(BLACK);
 
-        draw_rays(rays, shadow_circle);
-        move_emitter_circle(circle, rays);
-        move_obstacle_circle(shadow_circle);
+        draw_light_direction(light_direction, debug);
+        render_scene(emitter_rays, shadow_circle1, light_direction, debug);
+        move_emitter_circle(circle, emitter_rays);
+        move_obstacle_circle(shadow_circle1, debug);
 
         EndDrawing();
     }
